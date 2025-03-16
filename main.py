@@ -8,9 +8,9 @@ from trainer import Trainer
 
 def main(train_new=True):
     # Settings
-    dataset_path = 'D:/DeepArch/arcDataset'
-    base_model_name = "ResNet50"  # For example, "ResNet152", "VGG16", etc.
-    target_size = (64, 64)
+    dataset_path = 'D:/DeepArch/arcDataset_shift_balanced'
+    base_model_name = "ResNet152"  # For example, "ResNet152", "VGG16", etc.
+    target_size = (224, 224)
     batch_size = 32
     epochs = 10
     hidden_size = 512
@@ -19,10 +19,10 @@ def main(train_new=True):
     # Initialize feature extractor and load dataset.
     extractor = FeatureExtractor(base_model_name, target_size=target_size)
     image_data, labels = extractor.load_dataset(dataset_path)
-    print(f"Loaded {len(image_data)} images.")
-
-    # Generate embeddings.
+    extractor.print_class_counts(labels)
     embeddings = extractor.get_embeddings_in_batches(image_data, batch_size=batch_size)
+    extractor.save_embeddings(embeddings, output_folder="embeddings")
+    print(f"Loaded {len(image_data)} images.")
 
     # Flatten embeddings.
     N, C, H, W = embeddings.shape

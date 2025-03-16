@@ -11,7 +11,7 @@ def plot_training_history(history_path="training_history.json"):
     test_accs = history["test_accuracies"]
     final_train_acc = history["final_train_accuracy"]
     final_test_acc = history["final_test_accuracy"]
-    model_name = history.get("model_name", "Unknown Model")
+    model_name = history.get("experiment_name", "Unknown Model")
     epochs = range(1, len(train_accs) + 1)
 
     # Plot the accuracy curves.

@@ -5,6 +5,7 @@ from PIL import Image
 from tqdm import tqdm
 import nnabla as nn
 import nnabla.models.imagenet as models 
+from collections import Counter
 
 class FeatureExtractor:
     def __init__(self, model_name, target_size=(64, 64)):
@@ -59,7 +60,7 @@ class FeatureExtractor:
         return np.array(image_data), np.array(labels)
 
     def get_embeddings_in_batches(self, image_data, batch_size=32):
-        # Generate embeddings for the image data in mini-batches."""
+        # Generate embeddings for the image data in mini-batches.
         embeddings_list = []
         for i in tqdm(range(0, len(image_data), batch_size), desc="Generating Embeddings", ncols=100):
             batch = image_data[i:i+batch_size]
@@ -72,3 +73,24 @@ class FeatureExtractor:
             embeddings_list.append(embeddings.d)
             del embeddings  # free memory
         return np.concatenate(embeddings_list, axis=0)
+    
+    def print_class_counts(self, labels):
+        """
+        Print how many images there are for each class, based on the provided labels.
+        """
+        counts = Counter(labels)
+        print("Class distribution:")
+        for label, count in counts.items():
+            print(f"{label}: {count} images")
+    
+    def save_embeddings(self, embeddings, output_folder="."):
+        """
+        Save the embeddings to a .npy file. The filename will include the base model
+        and the image size (e.g., embeddings_ResNet50_64x64.npy).
+        """
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        file_name = f"embeddings_{self.model_name}_{self.target_size[0]}x{self.target_size[1]}.npy"
+        file_path = os.path.join(output_folder, file_name)
+        np.save(file_path, embeddings)
+        print(f"Embeddings saved to: {file_path}")
