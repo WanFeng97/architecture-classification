@@ -1,49 +1,65 @@
 # main.py
 import numpy as np
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from feature_extractor import FeatureExtractor
 from classifier import MLP
 from trainer import Trainer
 
 def main(train_new=True):
-    # Settings
-    dataset_path = 'D:/DeepArch/arcDataset_shift_balanced'
-    base_model_name = "ResNet152"  # For example, "ResNet152", "VGG16", etc.
-    target_size = (224, 224)
+    # Settings: update these paths as needed.
+    train_dataset_path = 'D:/DeepArch/arcDataset_train_augmented'
+    test_dataset_path = 'D:/DeepArch/arcDataset_test'
+    base_model_name = "ResNet152"  # e.g., "ResNet152", "VGG16", etc.
+    target_size = (32, 32)
     batch_size = 32
     epochs = 10
     hidden_size = 512
     history_path = "training_history.json"
 
-    # Initialize feature extractor and load dataset.
+    # Initialize feature extractor.
     extractor = FeatureExtractor(base_model_name, target_size=target_size)
-    image_data, labels = extractor.load_dataset(dataset_path)
-    extractor.print_class_counts(labels)
-    embeddings = extractor.get_embeddings_in_batches(image_data, batch_size=batch_size)
-    extractor.save_embeddings(embeddings, output_folder="embeddings")
-    print(f"Loaded {len(image_data)} images.")
-
+    
+    # Load training dataset.
+    train_image_data, train_labels = extractor.load_dataset(train_dataset_path)
+    print("Training set:")
+    extractor.print_class_counts(train_labels)
+    
+    # Load test dataset.
+    test_image_data, test_labels = extractor.load_dataset(test_dataset_path)
+    print("Test set:")
+    extractor.print_class_counts(test_labels)
+    
+    # Compute embeddings for training and test sets separately.
+    print("Generating training embeddings...")
+    train_embeddings = extractor.get_embeddings_in_batches(train_image_data, batch_size=batch_size)
+    print("Generating test embeddings...")
+    test_embeddings = extractor.get_embeddings_in_batches(test_image_data, batch_size=batch_size)
+    
+    # Optionally, save the training embeddings.
+    extractor.save_embeddings(train_embeddings, output_folder="embeddings")
+    
     # Flatten embeddings.
-    N, C, H, W = embeddings.shape
-    embeddings_flat = embeddings.reshape(N, C * H * W)
-    print(f"Flattened embeddings shape: {embeddings_flat.shape}")
+    N, C, H, W = train_embeddings.shape
+    train_embeddings_flat = train_embeddings.reshape(N, C * H * W)
+    print(f"Flattened training embeddings shape: {train_embeddings_flat.shape}")
+    
+    N_test, C_test, H_test, W_test = test_embeddings.shape
+    test_embeddings_flat = test_embeddings.reshape(N_test, C_test * H_test * W_test)
+    print(f"Flattened test embeddings shape: {test_embeddings_flat.shape}")
 
-    # Encode labels.
+    # Encode labels: fit on the combined set for consistency.
     label_encoder = LabelEncoder()
-    labels_encoded = label_encoder.fit_transform(labels)
-
-    # Split the data.
-    X_train, X_test, y_train, y_test = train_test_split(
-        embeddings_flat, labels_encoded, test_size=0.2, random_state=42
-    )
-
+    all_labels = np.concatenate([train_labels, test_labels])
+    label_encoder.fit(all_labels)
+    train_labels_encoded = label_encoder.transform(train_labels)
+    test_labels_encoded = label_encoder.transform(test_labels)
+    
     if train_new:
         # Create the classifier model.
-        input_size = X_train.shape[1]
-        output_size = len(np.unique(y_train))
+        input_size = train_embeddings_flat.shape[1]
+        output_size = len(np.unique(train_labels_encoded))
         model = MLP(input_size=input_size, hidden_size=hidden_size, output_size=output_size)
-
+    
         # Build extra information to be saved with the training history.
         experiment_name = f"{base_model_name}_{target_size[0]}x{target_size[1]}_MLP"
         extra_info = {
@@ -51,14 +67,16 @@ def main(train_new=True):
             "base_model": base_model_name,
             "image_size": target_size
         }
-
-        # Train the model and save training history with extra information.
+    
+        # Train the model on the training set and evaluate on the test set.
         trainer = Trainer(model=model, batch_size=batch_size, epochs=epochs)
-        trainer.train(X_train, y_train, X_test, y_test, history_path=history_path, extra_info=extra_info)
-
+        trainer.train(train_embeddings_flat, train_labels_encoded,
+                      test_embeddings_flat, test_labels_encoded,
+                      history_path=history_path, extra_info=extra_info)
+    
         # Evaluate final accuracy.
-        final_train_acc = trainer.evaluate(X_train, y_train)
-        final_test_acc = trainer.evaluate(X_test, y_test)
+        final_train_acc = trainer.evaluate(train_embeddings_flat, train_labels_encoded)
+        final_test_acc = trainer.evaluate(test_embeddings_flat, test_labels_encoded)
         print(f"Final Train Accuracy: {final_train_acc * 100:.2f}%")
         print(f"Final Test Accuracy: {final_test_acc * 100:.2f}%")
     else:
