@@ -73,7 +73,7 @@ def sanitize_filename(filename):
 def flip_horizontal(img):
     return img.transpose(Image.FLIP_LEFT_RIGHT)
 
-def shift_image(img, max_fraction=0.1):
+def shift_image(img, max_fraction=0.2):
     """
     Shift the image left or right by a random amount up to max_fraction of the image width.
     The function crops the image to remove any empty space.
@@ -102,7 +102,7 @@ def random_augmentation(img):
     Randomly apply one or more transformations:
       - Horizontal flip.
       - Left/right shift.
-      - Color jitter with more pronounced effects.
+      - Color jitter with pronounced effects.
     """
     transformations = [
         flip_horizontal,
@@ -112,24 +112,18 @@ def random_augmentation(img):
                                 contrast_factor=random.uniform(0.5, 1.5))
     ]
     aug_img = img.copy()
+    # Randomly choose between 1 and all available transformations.
     for transform in random.sample(transformations, k=random.randint(1, len(transformations))):
         aug_img = transform(aug_img)
     return aug_img
 
-def balance_augment_and_save(train_folder, augmented_train_folder):
+def augment_and_save_uniformly(train_folder, augmented_train_folder, augmentations_per_image=3):
     """
-    Creates a balanced training dataset by:
-      1. Copying original training images to augmented_train_folder.
-      2. Generating extra augmented images for classes with fewer samples
-         until each class reaches the target count (the maximum class count in train_folder).
+    Creates an augmented training dataset by copying original training images to augmented_train_folder and then 
+    generating a fixed number of augmented images for each original image.
+    This preserves the original distribution since each image is augmented by the same factor.
     """
     os.makedirs(augmented_train_folder, exist_ok=True)
-    
-    # Get current class counts in the training set.
-    class_counts = get_class_counts(train_folder)
-    target_count = max(class_counts.values())
-    print("Training dataset counts:", class_counts)
-    print("Target count per class:", target_count)
     
     for class_name in os.listdir(train_folder):
         class_dir = os.path.join(train_folder, class_name)
@@ -137,15 +131,16 @@ def balance_augment_and_save(train_folder, augmented_train_folder):
             continue
         
         # Create a folder for the class in the augmented training set.
-        balanced_class_dir = os.path.join(augmented_train_folder, class_name)
-        os.makedirs(balanced_class_dir, exist_ok=True)
+        augmented_class_dir = os.path.join(augmented_train_folder, class_name)
+        os.makedirs(augmented_class_dir, exist_ok=True)
         
-        original_filenames = [f for f in os.listdir(class_dir) if f.lower().endswith(('png', 'jpg', 'jpeg'))]
+        # List all image filenames.
+        filenames = [f for f in os.listdir(class_dir) if f.lower().endswith(('png', 'jpg', 'jpeg'))]
         
         # Copy original training images.
-        for filename in original_filenames:
+        for filename in filenames:
             src_path = os.path.join(class_dir, filename)
-            dst_path = os.path.join(balanced_class_dir, sanitize_filename(filename))
+            dst_path = os.path.join(augmented_class_dir, sanitize_filename(filename))
             if not os.path.exists(src_path):
                 print(f"Warning: Source file does not exist: {src_path}")
                 continue
@@ -154,32 +149,25 @@ def balance_augment_and_save(train_folder, augmented_train_folder):
             except Exception as e:
                 print(f"Error copying {src_path} to {dst_path}: {e}")
         
-        current_count = len(original_filenames)
-        needed = target_count - current_count
-        print(f"Class: {class_name}, current: {current_count} images, need {needed} extra images.")
-        
-        # Generate extra images until each class reaches target_count.
-        for i in range(needed):
-            chosen_filename = random.choice(original_filenames)
-            img_path = os.path.join(class_dir, chosen_filename)
-            if not os.path.exists(img_path):
-                print(f"Warning: Cannot find {img_path} for augmentation.")
-                continue
+        # For each image, generate a fixed number of augmented images.
+        for filename in filenames:
+            src_path = os.path.join(class_dir, filename)
             try:
-                img = Image.open(img_path)
+                img = Image.open(src_path)
             except Exception as e:
-                print(f"Error opening {img_path}: {e}")
+                print(f"Error opening {src_path}: {e}")
                 continue
-            aug_img = random_augmentation(img)
-            base, ext = os.path.splitext(chosen_filename)
-            new_filename = f"{base}_aug_bal{i}{ext}"
-            new_filename = sanitize_filename(new_filename)
-            save_path = os.path.join(balanced_class_dir, new_filename)
-            try:
-                aug_img.save(save_path)
-                print(f"Saved augmented image: {save_path}")
-            except Exception as e:
-                print(f"Error saving {save_path}: {e}")
+            for i in range(augmentations_per_image):
+                aug_img = random_augmentation(img)
+                base, ext = os.path.splitext(filename)
+                new_filename = f"{base}_aug{i}{ext}"
+                new_filename = sanitize_filename(new_filename)
+                save_path = os.path.join(augmented_class_dir, new_filename)
+                try:
+                    aug_img.save(save_path)
+                    print(f"Saved augmented image: {save_path}")
+                except Exception as e:
+                    print(f"Error saving {save_path}: {e}")
 
 def print_class_counts(dataset_path):
     """
@@ -192,10 +180,10 @@ def print_class_counts(dataset_path):
     print(f"Total images: {total}")
 
 if __name__ == "__main__":
-    original_dataset = "D:/DeepArch/arcDataset"
-    train_folder = "D:/DeepArch/arcDataset_train"
-    test_folder = "D:/DeepArch/arcDataset_test"
-    augmented_train_folder = "D:/DeepArch/arcDataset_train_augmented"
+    '''original_dataset = "D:/DeepArch/arcDataset_architect/Shortlist"
+    train_folder = "D:/DeepArch/architect_train"
+    test_folder = "D:/DeepArch/architect_test"
+    augmented_train_folder = "D:/DeepArch/architect_train_augmented"
     
     print("Splitting dataset into training and test sets...")
     split_dataset(original_dataset, train_folder, test_folder, test_size=0.2)
@@ -205,8 +193,15 @@ if __name__ == "__main__":
     print("\nTest dataset class counts:")
     print_class_counts(test_folder)
     
-    print("\nPerforming augmentation on training set...")
-    balance_augment_and_save(train_folder, augmented_train_folder)
+    print("\nPerforming uniform augmentation on training set...")
+    augment_and_save_uniformly(train_folder, augmented_train_folder, augmentations_per_image=3)
     
     print("\nAugmented training dataset class counts:")
-    print_class_counts(augmented_train_folder)
+    print_class_counts(augmented_train_folder)'''
+
+    test_folder = "D:/DeepArch/update_architect_dataset_test"
+    train_folder = "D:/DeepArch/update_architect_dataset_train"
+    augmented_train_folder = "D:/DeepArch/update_architect_dataset_train_augmented"
+
+    augment_and_save_uniformly(train_folder, augmented_train_folder, augmentations_per_image=3)
+

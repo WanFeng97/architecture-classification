@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 class Trainer:
-    def __init__(self, model, learning_rate=0.001, weight_decay=0.0001, batch_size=32, epochs=10, class_weights=None):
+    def __init__(self, model, learning_rate=0.0001, weight_decay=0.0001, batch_size=32, epochs=10, class_weights=None):
         self.model = model
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay

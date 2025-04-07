@@ -32,7 +32,7 @@ class FeatureExtractor:
         if model_name.lower().startswith("resnet"):
             modules = list(model.children())[:-1]
             model = nn.Sequential(*modules)
-        # For VGG, you might want to use only features.
+        # For VGG might want to use only features.
         elif model_name.lower().startswith("vgg"):
             model = model.features
         return model
